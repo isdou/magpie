@@ -1191,9 +1191,9 @@ magpie.plugin("sessions", (ctx) => {
     r.append(fold, when);
     const acts = [];
     const allInFolder = (data.sessions || []).filter((s) => groupOf(s) === cwd);
-    if (data.agent === "claude" && path && allInFolder.every((s) => !s.read_only && !s.gateway)
+    if ((data.agent === "claude" || data.agent === "codex") && path && allInFolder.every((s) => !s.read_only && !s.gateway)
       && new Set(allInFolder.map((s) => s.wsl || "")).size === 1) {
-      acts.push({ name: "Relocate project", icon: MOVE, run: () => askRelocate(cwd, allInFolder[0].wsl || "") });
+      acts.push({ name: "Relocate project", icon: MOVE, run: () => askRelocate(data.agent, cwd, allInFolder[0].wsl || "") });
     }
     if (current()?.deletable && writable.length) {
       acts.push({ name: "Delete all sessions", icon: TRASH, sep: acts.length > 0, run: () => askDelete(writable.map((s) => s.id), wholeFolder(writable.map((s) => s.id))) });
@@ -1746,12 +1746,16 @@ magpie.plugin("sessions", (ctx) => {
     if (ranges.length) CSS.highlights.set("sess-found", new Highlight(...ranges));
   }
 
-  function askRelocate(from, wsl) {
+  function askRelocate(agentKind, from, wsl) {
+    const isCodex = agentKind === "codex";
+    const endpoint = isCodex ? "sessions/relocate-codex" : "sessions/relocate-claude";
     const ed = el("div", "editor sm-ask");
     const h = el("div", "ehead");
-    h.append(icon("claude"), el("b", "", t("Relocate Claude Code project")));
+    h.append(icon(isCodex ? current()?.icon || "openai" : "claude"), el("b", "", t(isCodex ? "Relocate Codex project" : "Relocate Claude Code project")));
     ed.append(h, el("p", "sub sm-ask-path", (wsl ? `WSL ${wsl}: ` : "") + from));
-    ed.append(el("p", "lib-confirm", t("Close Claude Code and its editor sessions first. This moves the entire project's sessions, not just filtered or selected rows. Existing target storage is never overwritten. Desktop-only sessions are not changed.")));
+    ed.append(el("p", "lib-confirm", t(isCodex
+      ? "Close Codex and its editor sessions first. This moves every session of the project in Codex's store, not just filtered or selected rows. Rollouts whose history is paginated cannot move to a longer path."
+      : "Close Claude Code and its editor sessions first. This moves the entire project's sessions, not just filtered or selected rows. Existing target storage is never overwritten. Desktop-only sessions are not changed.")));
     const label = el("label", "sm-ask-field", t("New absolute project path"));
     const input = el("input", "");
     input.type = "text";
@@ -1775,7 +1779,7 @@ magpie.plugin("sessions", (ctx) => {
       go.disabled = cancel.disabled = input.disabled = true;
       go.classList.add("busy");
       try {
-        const out = await api("sessions/relocate-claude", { from, to: input.value, wsl, token: preview?.token || "" });
+        const out = await api(endpoint, { from, to: input.value, wsl, token: preview?.token || "" });
         if (out.backup) {
           info.textContent = t("Relocation complete. Original files and recovery manifest: {dir}", { dir: out.backup });
           go.hidden = true;
@@ -1786,7 +1790,9 @@ magpie.plugin("sessions", (ctx) => {
           await load();
         } else {
           preview = out;
-          info.textContent = t("Move {n} sessions ({size}) from {from} to {to}. Originals are retained outside Claude's project list. Historical message text is unchanged.", {
+          info.textContent = t(isCodex
+            ? "Move {n} sessions ({size}) from {from} to {to}. Originals are backed up before update. Historical message text is unchanged."
+            : "Move {n} sessions ({size}) from {from} to {to}. Originals are retained outside Claude's project list. Historical message text is unchanged.", {
             n: out.sessions, size: fmtBytes(out.bytes), from: out.from, to: out.to,
           });
           go.textContent = t("Confirm relocation");

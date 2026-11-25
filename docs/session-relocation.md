@@ -57,3 +57,35 @@ After an interrupted operation, inspect the manifest and the source,
 destination and `original` directories before restoring. A failed publish
 attempt restores the original source; if that restoration also fails, the error
 identifies the backup location. Backups are retained until you remove them.
+
+---
+
+# Relocate Codex project sessions
+
+When a project folder moves or is renamed, Codex's rollouts (`sessions/`,
+`archived_sessions/`) and SQLite indexes (`state_*.sqlite` and `sqlite/codex.db`)
+keep the old `cwd`. In **Sessions**, choose **Codex**, then **Relocate project**
+in the old folder's ⋯ menu, or run the CLI:
+
+```sh
+magpie sessions relocate-codex --from /home/me/old-project --to /home/me/new-project
+magpie sessions relocate-codex --from /home/me/old-project --to /home/me/new-project --confirm <token-from-preview>
+```
+
+The first step previews matched session count, bytes and a SHA-256 token; the
+confirmation token binds the update to those paths, rollout files and database
+rows. `CODEX_HOME`, when set for the CLI, selects the Codex store.
+
+## Codex scope and safety
+
+- Matched rollouts are updated atomically across `session_meta.payload.cwd`,
+  `runtime_workspace_roots`, `turn_context.payload.cwd`, and
+  `thread_settings_applied`, along with matching `cwd` rows in `state_*.sqlite`
+  (`threads`) and `sqlite/codex*.db` (`local_thread_catalog`).
+- Rollouts using `history_mode: "paginated"` keep byte offsets in forks and
+  Codex's state database, so they are padded in place at constant byte width and
+  are refused if the destination path would make any line longer than its
+  original byte length.
+- Close Codex and editor integrations before relocating. Original rollout files
+  and a `manifest.json` backup are saved under
+  `<Codex home>/magpie-relocations/codex-project-*/original`.

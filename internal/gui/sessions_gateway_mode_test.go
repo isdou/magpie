@@ -230,6 +230,9 @@ func TestGatewayModeListsNoOwnSessions(t *testing.T) {
 	if code, b := call("POST", "/api/sessions/relocate-claude", `{"from":"/work","to":"/elsewhere"}`); code == 200 {
 		t.Fatalf("gateway mode: relocating Claude Code's folder: %s", b)
 	}
+	if code, b := call("POST", "/api/sessions/relocate-codex", `{"from":"/work","to":"/elsewhere"}`); code == 200 {
+		t.Fatalf("gateway mode: relocating Codex's folder: %s", b)
+	}
 
 	// Off again: this computer's sessions are back at once
 	ok("POST", "/api/settings/gateway-mode", `{"mode":"off"}`)

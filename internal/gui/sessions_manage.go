@@ -98,24 +98,29 @@ func trashJSON(looks map[string]agent.Look) []trashedJSON {
 	return out
 }
 
-func sessionManageRoutes(mux *http.ServeMux, w Windows) {
-	sessionReadsRoutes(mux)
-	mux.HandleFunc("POST /api/sessions/relocate-claude", func(rw http.ResponseWriter, r *http.Request) {
-		var in sessions.ClaudeRelocation
+func handleRelocate[In, Out any](mux *http.ServeMux, pattern string, fn func(In) (Out, error), backupOf func(Out) string) {
+	mux.HandleFunc(pattern, func(rw http.ResponseWriter, r *http.Request) {
+		var in In
 		if err := json.NewDecoder(http.MaxBytesReader(rw, r.Body, 16384)).Decode(&in); err != nil {
 			fail(rw, err)
 			return
 		}
-		out, err := sessions.RelocateClaudeProject(in)
+		out, err := fn(in)
 		if err != nil {
 			fail(rw, err)
 			return
 		}
-		if out.Backup != "" {
+		if backupOf(out) != "" {
 			forgetStats()
 		}
 		writeJSON(rw, out)
 	})
+}
+
+func sessionManageRoutes(mux *http.ServeMux, w Windows) {
+	sessionReadsRoutes(mux)
+	handleRelocate(mux, "POST /api/sessions/relocate-claude", sessions.RelocateClaudeProject, func(out sessions.ClaudeRelocationResult) string { return out.Backup })
+	handleRelocate(mux, "POST /api/sessions/relocate-codex", sessions.RelocateCodexProject, func(out sessions.CodexRelocationResult) string { return out.Backup })
 	mux.HandleFunc("POST /api/sessions/recording", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
 			On    bool `json:"on"`

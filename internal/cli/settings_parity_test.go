@@ -526,6 +526,7 @@ var notYet = map[string]string{
 	"POST /api/sessions/purge":                   U,  // sessions_manage.go
 	"POST /api/sessions/recording":               U,  // sessions_manage.go
 	"POST /api/sessions/relocate-claude":         U,  // sessions_manage.go
+	"POST /api/sessions/relocate-codex":          U,  // sessions_manage.go
 	"POST /api/sessions/restore":                 U,  // sessions_manage.go
 	"GET /api/sessions/markdown":                 U,  // sessions.go
 	"GET /api/sessions/one":                      U,  // sessions.go

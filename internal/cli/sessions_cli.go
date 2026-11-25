@@ -23,7 +23,14 @@ const sessionsUsage = "usage: magpie sessions [--days N|today|all] [--model <mod
 // view shows it.
 func sessionsCmd(args []string) error {
 	if len(args) > 1 && args[1] == "relocate-claude" {
-		return relocateClaudeTo(os.Stdout, args[2:])
+		return relocateProjectTo(os.Stdout, args[2:], "relocate-claude", func(from, to, token string) (any, error) {
+			return sessions.RelocateClaudeProject(sessions.ClaudeRelocation{From: from, To: to, Token: token})
+		})
+	}
+	if len(args) > 1 && args[1] == "relocate-codex" {
+		return relocateProjectTo(os.Stdout, args[2:], "relocate-codex", func(from, to, token string) (any, error) {
+			return sessions.RelocateCodexProject(sessions.CodexRelocation{From: from, To: to, Token: token})
+		})
 	}
 	if len(args) > 1 && args[1] == "read" {
 		return sessionReadsTo(os.Stdout, args[2:])
@@ -112,28 +119,28 @@ func sessionReadsTo(w io.Writer, args []string) error {
 	return sessionReadsTo(w, nil)
 }
 
-func relocateClaudeTo(w io.Writer, args []string) error {
-	const usage = "usage: magpie sessions relocate-claude --from <absolute-path> --to <absolute-path> [--confirm <preview-token>]"
-	var in sessions.ClaudeRelocation
+func relocateProjectTo(w io.Writer, args []string, sub string, run func(from, to, token string) (any, error)) error {
+	usage := "usage: magpie sessions " + sub + " --from <absolute-path> --to <absolute-path> [--confirm <preview-token>]"
+	var from, to, token string
 	for i := 0; i < len(args); i += 2 {
 		if i+1 >= len(args) || args[i+1] == "" {
 			return fmt.Errorf("%s", usage)
 		}
 		switch args[i] {
 		case "--from":
-			in.From = args[i+1]
+			from = args[i+1]
 		case "--to":
-			in.To = args[i+1]
+			to = args[i+1]
 		case "--confirm":
-			in.Token = args[i+1]
+			token = args[i+1]
 		default:
 			return fmt.Errorf("%s", usage)
 		}
 	}
-	if in.From == "" || in.To == "" {
+	if from == "" || to == "" {
 		return fmt.Errorf("%s", usage)
 	}
-	out, err := sessions.RelocateClaudeProject(in)
+	out, err := run(from, to, token)
 	if err != nil {
 		return err
 	}

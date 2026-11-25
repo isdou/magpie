@@ -53,25 +53,31 @@ func RelocateClaudeProject(in ClaudeRelocation) (ClaudeRelocationResult, error) 
 	}
 	out, err := relocateClaudeProject(root, target, in)
 	if err == nil && out.Backup != "" {
-		// Discard both parses and directory listings after their paths change.
-		cache, loaded = nil, false
-		cacheGeneration++
-		directoryCache.Lock()
-		directoryCache.entries = map[string]directoryEntry{}
-		directoryCache.Unlock()
-		resetCalls()
-		wslReset()
+		forgetRelocationCaches()
 	}
 	return out, err
 }
 
-func claudeRelocationRoot(in ClaudeRelocation) (string, string, error) {
-	if in.WSL == "" {
-		return ClaudeDir(), in.To, nil
-	}
+func forgetRelocationCaches() {
+	// Discard both parses and directory listings after their paths change.
+	cache, loaded = nil, false
+	cacheGeneration++
+	directoryCache.Lock()
+	directoryCache.entries = map[string]directoryEntry{}
+	directoryCache.Unlock()
+	resetCalls()
+	wslReset()
+	forgetListsKept()
+	forgetWarmListing()
+	forgetPaged()
+	forgetKeptStats()
+	forgetKeptList()
+}
+
+func wslRelocationRoot(dirName, wsl, to string) (string, string, error) {
 	if WSLHomes != nil {
 		for _, h := range WSLHomes() {
-			if h.Distro != in.WSL {
+			if h.Distro != wsl {
 				continue
 			}
 			if !h.Running {
@@ -83,10 +89,17 @@ func claudeRelocationRoot(in ClaudeRelocation) (string, string, error) {
 			if volume == "" || !strings.HasPrefix(volume, `\\`) {
 				return "", "", errors.New("WSL filesystem root is unavailable")
 			}
-			return filepath.Join(h.Home, ".claude"), filepath.Join(volume, filepath.FromSlash(in.To)), nil
+			return filepath.Join(h.Home, dirName), filepath.Join(volume, filepath.FromSlash(to)), nil
 		}
 	}
 	return "", "", errors.New("unknown WSL distribution")
+}
+
+func claudeRelocationRoot(in ClaudeRelocation) (string, string, error) {
+	if in.WSL == "" {
+		return ClaudeDir(), in.To, nil
+	}
+	return wslRelocationRoot(".claude", in.WSL, in.To)
 }
 
 func claudeProjectName(p string) (string, error) {
@@ -111,15 +124,22 @@ func claudeSlug(p string) string {
 	return b.String()
 }
 
-func relocationPaths(in ClaudeRelocation) (string, string, error) {
-	for _, p := range []string{in.From, in.To} {
+func validateRelocationPaths(from, to, wsl string) error {
+	for _, p := range []string{from, to} {
 		valid := filepath.IsAbs(p) && filepath.Clean(p) == p
-		if in.WSL != "" {
+		if wsl != "" {
 			valid = path.IsAbs(p) && path.Clean(p) == p && !strings.Contains(p, `\`)
 		}
 		if !valid || strings.ContainsAny(p, "\x00\r\n") {
-			return "", "", errors.New("use a clean absolute project path, without a trailing separator")
+			return errors.New("use a clean absolute project path, without a trailing separator")
 		}
+	}
+	return nil
+}
+
+func relocationPaths(in ClaudeRelocation) (string, string, error) {
+	if err := validateRelocationPaths(in.From, in.To, in.WSL); err != nil {
+		return "", "", err
 	}
 	from, err := claudeProjectName(in.From)
 	if err != nil {
