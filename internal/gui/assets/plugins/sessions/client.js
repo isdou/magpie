@@ -134,10 +134,20 @@ magpie.plugin("sessions", (ctx) => {
   // their own, not "No folder", keeps them apart from sessions whose agent
   // recorded no folder.
   const DRAFTS = "\x00drafts";
+  const bbDraft = (s) => {
+    if (!s?.cwd) return false;
+    const c = s.cwd.replace(/\\/g, "/").replace(/\/+$/, "");
+    if (/\/\.bb-machines\/[^/]+\/plugins\/environment-personal-workspace\/host-data\/workspaces\/thr_[^/]+(?:\/|$)/i.test(c)) return true;
+    return !s.worktree_of && /\/\.bb-machines\/[^/]+\/plugins\/environment-git-worktree\/host-data\/worktrees\/thr_[^/]+(?:\/|$)/i.test(c);
+  };
   const zcodeDraft = (s) => {
     const home = (data?.home || "").replace(/\\/g, "/").replace(/\/+$/, "");
     if (!s.cwd) return false;
+    // Linked worktrees resolved back to a repository belong to that project,
+    // even when their own folder sits under ~/.codex/worktrees or ~/.bb-machines.
+    if (s.worktree_of) return false;
     const c = s.cwd.replace(/\\/g, "/");
+    if (bbDraft(s)) return true;
     // Codex Desktop makes ~/Documents/Codex/<date>/<name> for every chat
     // started without a project (its outputs/ and work/), and Codex also
     // runs in temp folders and worktrees
@@ -145,7 +155,7 @@ magpie.plugin("sessions", (ctx) => {
     if (!home || s.agent !== "zcode") return false;
     return c === home + "/.zcode/workspace" || c.startsWith(home + "/.zcode/workspace/");
   };
-  const groupOf = (s) => zcodeDraft(s) ? DRAFTS : s.cwd || (s.gateway ? GW : "");
+  const groupOf = (s) => zcodeDraft(s) ? DRAFTS : s.worktree_of || s.cwd || (s.gateway ? GW : "");
   const groupName = (k) => k === GW ? t("Seen through the gateway")
     : k === DRAFTS ? t("Draft sessions") : k ? baseName(k) : t("No folder");
 
@@ -264,7 +274,7 @@ magpie.plugin("sessions", (ctx) => {
   const shown = () => {
     const q = query.trim().toLowerCase();
     const list = data?.sessions || [];
-    return q ? list.filter((s) => hitOf(s) || [s.title, s.cwd, s.id, ...(s.models || []).map((m) => m.model)].some((x) => (x || "").toLowerCase().includes(q))) : list;
+    return q ? list.filter((s) => hitOf(s) || [s.title, s.cwd, s.worktree_of, s.id, ...(s.models || []).map((m) => m.model)].some((x) => (x || "").toLowerCase().includes(q))) : list;
   };
 
   // filterBy makes v the filter's words; now (Enter, Escape) searches what
@@ -1191,7 +1201,8 @@ magpie.plugin("sessions", (ctx) => {
     r.append(fold, when);
     const acts = [];
     const allInFolder = (data.sessions || []).filter((s) => groupOf(s) === cwd);
-    if (data.agent === "claude" && path && allInFolder.every((s) => !s.read_only && !s.gateway)
+    if (data.agent === "claude" && path && allInFolder.some((s) => !s.worktree_of)
+      && allInFolder.every((s) => !s.read_only && !s.gateway)
       && new Set(allInFolder.map((s) => s.wsl || "")).size === 1) {
       acts.push({ name: "Relocate project", icon: MOVE, run: () => askRelocate(cwd, allInFolder[0].wsl || "") });
     }
@@ -1307,9 +1318,9 @@ magpie.plugin("sessions", (ctx) => {
       sub.prepend(p, " ");
     }
     who.append(sub);
-    // a draft session's folder is a name its agent made: the row says
-    // nothing of it otherwise (the group of them is one)
-    if (zcodeDraft(s)) r.title = s.cwd;
+    // a draft or worktree session's folder differs from its group's: the row says
+    // nothing of it otherwise
+    if (zcodeDraft(s) || s.worktree_of) r.title = s.cwd;
     const hit = hitOf(s);
     if (hit) who.append(hitLine(hit, s.transcript ? s : null));
     // what it spent, as the Usage page's list shows it

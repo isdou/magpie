@@ -155,6 +155,9 @@ type Session struct {
 	// WSL is the WSL distro the session ran in, its files read through
 	// \\wsl.localhost (see wsl.go); "" for this computer's own
 	WSL string `json:"wsl,omitempty"`
+	// WorktreeOf is the main repository directory when Cwd is inside a linked
+	// git worktree ("" when Cwd is the main checkout, outside git, or unknown).
+	WorktreeOf string `json:"worktree_of,omitempty"`
 	// Convs are the ids magpie's gateway keys the session's requests by
 	// when they carry no session id of their own (dshConvs)
 	Convs []string `json:"-"`
@@ -2032,6 +2035,7 @@ func Reset() {
 	forgetHermesPrints()
 	forgetAgySummaries()
 	forgetBehind()
+	forgetWorktrees()
 	mu.Lock()
 	defer mu.Unlock()
 	saved()
@@ -2199,6 +2203,7 @@ func assemble(fs []file, price func(string) *catalog.Price, codexTitle func(stri
 	if !s.ReadOnly {
 		s.Resume = resumeFor(s.WSL, s.Agent, s.ID, s.Cwd, s.Path)
 	}
+	s.WorktreeOf = worktreeOf(s.Cwd, s.WSL)
 	s.Carry, s.Transcript = carries(s), readable(s)
 	if s.Transcript {
 		s.Subagents = subagentsOf(s, fs)
